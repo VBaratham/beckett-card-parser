@@ -1,6 +1,13 @@
 from html.parser import HTMLParser
 from urllib.request import Request, urlopen
+from datetime import datetime
+import csv
+
 import requests
+
+import json
+import time
+import sys
 
 class BeckettParser(HTMLParser):
     
@@ -31,35 +38,43 @@ class BeckettParser(HTMLParser):
 
         if want:
             self.state += 1
-            print(self.state)
         else:
             self.state = BeckettParser.START
 
     def handle_data(self, data):
         if self.state == BeckettParser.A:
-            self.cards.append(str(data).strip())
+            new_card = data.strip()
+            self.cards.append(new_card)
+            print(new_card)
+            print(new_card, file=sys.stderr)
             self.state = BeckettParser.START
 
 if __name__ == '__main__':
     handler = BeckettParser()
-    url = 'https://www.beckett.com/search/?term=frank+thomas&player=414579&sport=185223&team=370834&set_type=202|201&rowNum=500&page=1'
+    orig_url = f'https://www.beckett.com/search/?term=frank+thomas+&player=414579&sport=185223&rowNum=1000&page=1' # removed '&set_type=204'
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'}
+    url = orig_url
 
+    # Load cookies
+    with open('cookies.json') as infile:
+        all_cookies = json.load(infile)
+        cookies = {c['name']: c['value'] for c in all_cookies}
+    
+    # Initialize, will be corrected after first page is loaded
     handler_items = 0
     currentPage = 1
-    pages = 99 # will be corrected after first page is loaded
+    pages = 99
 
     while currentPage < pages:
-        req = Request(
-                url,
-                data=None,
-                headers={
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'
-                        }
-            )
-        print("Getting {}".format(req.get_full_url()))
+        r = requests.get(url, headers=headers, cookies=cookies)
+        cookies = r.cookies
 
-        for line in urlopen(req).readlines():
-            line = line.decode('utf-8').strip()
+        outfn = 'raw_pages/pg{:03}_{}.html'.format(currentPage, datetime.now().isoformat())
+        with open(outfn, 'w') as outf:
+            outf.write(r.text)
+
+        for line in r.text.split('\n'):
+            line = line.strip()
             if line.startswith('items:'):
                 items = int(line.split()[-1][:-1]) # Total number of search results
             elif line.startswith('itemsOnPage:'):
@@ -69,14 +84,25 @@ if __name__ == '__main__':
             elif line.startswith('currentPage:'):
                 currentPage = int(line.split()[-1][:-1]) # Current page
 
-            print(line)
             handler.feed(line)
 
         # Check correct # items
-        new_items = len(handler.cards) - handler_items
-        import ipdb; ipdb.set_trace()
-        assert new_items == itemsOnPage, "Found {} items on page {}, expected {}".format(
-            new_items, currentPage, itemsOnPage)
-        handler_items = len(handler.cards)
+        if currentPage != pages:
+            new_items = len(handler.cards) - handler_items
+            assert new_items == itemsOnPage, "Found {} items on page {}, expected {}".format(
+                new_items, currentPage, itemsOnPage)
+            handler_items = len(handler.cards)
+        else:
+            assert len(handler.cards) == items
         
-        url = url[:-1] + str(currentPage + 1)
+        url = orig_url[:-1] + str(currentPage + 1)
+
+        print("Done page {}".format(currentPage), file=sys.stderr)
+
+        print("15")
+        time.sleep(5)
+        print("10")
+        time.sleep(5)
+        print("5")
+        time.sleep(5)
+        print("doing next page")
