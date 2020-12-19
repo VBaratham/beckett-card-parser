@@ -55,7 +55,7 @@ class BeckettParser(HTMLParser):
             new_card = data.strip()
             self.cards.append(new_card)
             print(new_card)
-            print(new_card, file=sys.stderr)
+            self.log.info("Parsed: {}".format(new_card))
             self.state = BeckettParser.START
 
     def set_cookies(self, cookiesfile):
@@ -71,9 +71,9 @@ class BeckettParser(HTMLParser):
             with open(saveto, 'w') as outfile:
                 outfile.write(r.text)
 
+        noitems = True
         for line in r.text.split('\n'):
             line = line.strip()
-            noitems = True
             if line.startswith('items:'):
                 items = int(line.split()[-1][:-1]) # Total number of search results
                 noitems = False
